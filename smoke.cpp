@@ -1,5 +1,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 
+#define posSpeed ( - 0.5 + rand() % 10 / 10)
+#define sclSpeed ( 0.01f + rand() % 10 / 5000.f)
 
 #include<stdlib.h>
 #include<stdio.h>
@@ -9,6 +11,7 @@
 #include <time.h>
 #include"glm\glm.hpp"
 #include"glut.h"
+
 static float frame = 0;
 
 typedef struct { unsigned char b, g, r; }RGB;
@@ -18,37 +21,54 @@ RGB *pixels;
 
 std::vector<unsigned char>texture;
 
-//class Vec3 {
-//public:
-//	float x, y, z;
-//	Vec3();
-//	Vec3(float _x, float _y, float _z) { x = _x, y = _y, z = _z; }
-//};
+
+class Vec3 {
+public:
+	float x, y, z;
+
+	Vec3(){}
+	Vec3(float _x, float _y, float _z) { x = _x, y = _y, z = _z; }
+	~Vec3(){}
+
+	Vec3 &operator += (const Vec3 &_speed) {
+		this->x += _speed.x;
+		this->y += _speed.y;
+		this->z += _speed.z;
+		return *this;
+	}
+};
 
 class Smoke {
 public:
+	Smoke(){}
+	~Smoke(){}
+
 	float alpha;
+
+	//updataでrandを使っていたとき
 	float pos_y;
 	float scl_x;
 	float scl_y;
 	float scl_z;
-	/*Vec3 scl;
-	Vec3 speed;*/
 
-	void update() {
-		alpha -= rand() % 10 /500.f;
+	Vec3 position;
+	Vec3 scale;
+	Vec3 pos_speed;
+	Vec3 scl_speed;
+
+	/*void updata() {
+		alpha -= rand() % 10 / 500.f;
 		scl_x += rand() % 10 / 300.f;
 		scl_y += rand() % 10 / 300.f;
 		scl_z += rand() % 10 / 300.f;
 		pos_y += 0.001f + rand() % 10 / 500.f;
-	}
-	/*void updata() {
-		alpha -= 0.1f;
-		scl_x += 0.1f + rand() % 10 / 300.f;
-		scl_y += 0.2f + rand() % 10 / 300.f;
-		scl_z += 0.1f + rand() % 10 / 300.f;
-		pos_y += 0.01f + rand() % 10 / 500.f;
 	}*/
+
+	void updata() {
+		alpha -= 0.01f;
+		position += pos_speed;
+		scale += scl_speed;
+	}
 };
 
 std::vector<Smoke>smoke;
@@ -84,7 +104,7 @@ void read_bmp() {
 		float n = (pixels[i].r + pixels[i].g + pixels[i].b) / 3;
 		texture.push_back(n);
 	}
-	printf("%d\n", texture[128 * 50 + 50]);
+
 }
 
 void timer(int value) {
@@ -97,9 +117,14 @@ void timer(int value) {
 
 void display(void) {
 
+	//背景色
 	glClearColor(0, 0, .5, 1);
-	glMatrixMode(GL_PROJECTION);
+
+	//色と深度のクリア
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	//カメラ設定
+	glMatrixMode(GL_PROJECTION);
 
 	glLoadIdentity();
 	gluPerspective(
@@ -118,6 +143,8 @@ void display(void) {
 		0, 0, 0,//GLdouble centerx,GLdouble centery,GLdouble centerz,
 		0, 1, 0);//GLdouble upx,GLdouble upy,GLdouble upz
 
+
+	//テクスチャ設定
 	glTexImage2D(
 		GL_TEXTURE_2D,		//GLenum target,
 		0,					//GLint level,
@@ -140,6 +167,11 @@ void display(void) {
 
 	glEnable(GL_TEXTURE_2D);
 
+	//カリング・深度設定
+	//glEnable(GL_DEPTH_TEST);
+	//glEnable(GL_CULL_FACE);
+
+	//煙の平面図
 	float v[] = {
 		-1,2,
 		-1,0,
@@ -169,10 +201,9 @@ void display(void) {
 	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
 	glTexCoordPointer(2, GL_FLOAT, 0, t);
 
-	//glEnable(GL_DEPTH_TEST);
-	//glEnable(GL_CULL_FACE);
 
 
+	//アルファ設定
 	glEnable(GL_BLEND);
 	glBlendFunc(
 		GL_SRC_ALPHA,           // GLenum sfactor
@@ -198,45 +229,80 @@ void display(void) {
 
 	glEnable(GL_TEXTURE_2D);
 
-	Smoke smk;
-	smk.pos_y = 0;
-	smk.scl_x = 0;
-	smk.scl_y = 0;
-	smk.scl_z = 0;
-	smk.alpha = 1;
-	/*smk.speed.x = rand() % 10 / 100;
-	smk.speed.y = rand() % 10 / 100;
-	smk.speed.z = rand() % 10 / 100;*/
+
+
+
 	frame++;
 
-	if(frame == 10){
+	//煙の描画間隔を広げるため
+	if (frame == 10) {
+		//煙の初期値設定
+		Smoke smk;
+
+		/*smk.pos_y = 0;
+		smk.scl_x = 0;
+		smk.scl_y = 0;
+		smk.scl_z = 0;*/
+
+		smk.alpha = 1;
+
+		smk.position = Vec3(0, 0, 0);
+		smk.scale = Vec3(0, 0, 0);
+
+		smk.pos_speed.x = posSpeed;
+		smk.pos_speed.y = posSpeed;
+		smk.pos_speed.z = posSpeed;
+
+		smk.scl_speed.x = sclSpeed;
+		smk.scl_speed.y = sclSpeed;
+		smk.scl_speed.z = sclSpeed;
+
+
 		smoke.push_back(smk);
 		frame = 0;
 	}
-	
+
+	/*std::list<Smoke> smoke_list;
+
+	std::list<Smoke>::iterator it = smoke_list.begin();
+
+	while (it != smoke_list.end()) {
+
+		int n = (*it).n;
+
+		it++;
+	}
+*/
+
 	for (int i = 0; i < smoke.size(); i++) {
 		glPushMatrix();
-		{	
-		glm::mat4 view;
-		glGetFloatv(
-			GL_MODELVIEW_MATRIX,
-			(float*)&view
-			);
+		{
+			//煙の描画を常に正面に向ける（ビルボード
+			glm::mat4 view;
+			glGetFloatv(
+				GL_MODELVIEW_MATRIX,
+				(float*)&view
+				);
 
-		glm::mat4 m = inverse(view);
-		m[3][0] = m[3][1] = m[3][2] = 0;
-		glMultMatrixf((float*)&m);//const GL_FSloat *m
+			glm::mat4 m = inverse(view);
+			m[3][0] = m[3][1] = m[3][2] = 0;
+			glMultMatrixf((float*)&m);//const GL_FSloat *m
+
+			smoke[i].updata();
+
 		
-		smoke[i].update();
+			/*glColor4f(1, 1, 1, smoke[i].alpha);
+			glScalef(smoke[i].scl_x, smoke[i].scl_y, smoke[i].scl_z);
+			glTranslatef(0, smoke[i].pos_y, 0);*/
 
-		glColor4f(1, 1, 1, smoke[i].alpha);
-		glScalef(smoke[i].scl_x, smoke[i].scl_y, smoke[i].scl_z);
-		glTranslatef(0, smoke[i].pos_y, 0);
+			glColor4f(1, 1, 1, smoke[i].alpha);
+			glScalef(smoke[i].scale.x,smoke[i].scale.y, smoke[i].scale.z);
+			glTranslatef(smoke[i].scale.x, smoke[i].scale.y, smoke[i].scale.z);
 
-		glDrawArrays(
-			GL_TRIANGLE_STRIP,
-			0,
-			4);
+			glDrawArrays(
+				GL_TRIANGLE_STRIP,
+				0,
+				4);
 
 		}
 		glPopMatrix();
