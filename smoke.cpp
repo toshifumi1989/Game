@@ -1,13 +1,15 @@
 #define _CRT_SECURE_NO_WARNINGS
 
-#define posSpeed ( - 0.5 + rand() % 10 / 10)
-#define sclSpeed ( 0.01f + rand() % 10 / 5000.f)
+#define posSpeed ( (- 1.f + rand() % 20 / 10.f)/100)
+#define posSpeed_Y ( 0.01f + rand() % 5 / 500.f )
+#define sclSpeed ( 0.01f + rand() % 10 / 1000.f)
 
 #include<stdlib.h>
 #include<stdio.h>
 #include <windows.h>
 #include<assert.h>
 #include<vector>
+#include<list>
 #include <time.h>
 #include"glm\glm.hpp"
 #include"glut.h"
@@ -19,16 +21,16 @@ BITMAPFILEHEADER bf;
 BITMAPINFOHEADER bi;
 RGB *pixels;
 
-std::vector<unsigned char>texture;
-
+std::vector< unsigned char >texture;
+//std::list< unsigned char >texture_list;
 
 class Vec3 {
 public:
 	float x, y, z;
 
-	Vec3(){}
+	Vec3() {}
 	Vec3(float _x, float _y, float _z) { x = _x, y = _y, z = _z; }
-	~Vec3(){}
+	~Vec3() {}
 
 	Vec3 &operator += (const Vec3 &_speed) {
 		this->x += _speed.x;
@@ -40,8 +42,8 @@ public:
 
 class Smoke {
 public:
-	Smoke(){}
-	~Smoke(){}
+	Smoke() {}
+	~Smoke() {}
 
 	float alpha;
 
@@ -56,22 +58,17 @@ public:
 	Vec3 pos_speed;
 	Vec3 scl_speed;
 
-	/*void updata() {
-		alpha -= rand() % 10 / 500.f;
-		scl_x += rand() % 10 / 300.f;
-		scl_y += rand() % 10 / 300.f;
-		scl_z += rand() % 10 / 300.f;
-		pos_y += 0.001f + rand() % 10 / 500.f;
-	}*/
-
 	void updata() {
 		alpha -= 0.01f;
+
+		printf("%f %f %f\n", pos_speed.x, pos_speed.y, pos_speed.z);
 		position += pos_speed;
 		scale += scl_speed;
 	}
 };
 
-std::vector<Smoke>smoke;
+std::vector < Smoke > smoke;
+std::list < Smoke > smoke_list;
 
 void read_bmp() {
 
@@ -117,6 +114,8 @@ void timer(int value) {
 
 void display(void) {
 
+
+
 	//背景色
 	glClearColor(0, 0, .5, 1);
 
@@ -138,6 +137,7 @@ void display(void) {
 
 	static float r = 0;
 	r += 3.14 / 500;
+
 	gluLookAt(
 		sin(r) * 3, 3, cos(r) * 3,//GLdouble eyex,GLdouble eyey,GLdouble eyez,
 		0, 0, 0,//GLdouble centerx,GLdouble centery,GLdouble centerz,
@@ -181,11 +181,7 @@ void display(void) {
 
 	glEnableClientState(GL_VERTEX_ARRAY);//(GLenum array);
 
-	glVertexPointer(
-		2,				//GLint size,
-		GL_FLOAT,		//GLenum type,
-		0,				//GLsizei stride,
-		v);				// const GLvoid *pointer
+	glVertexPointer(2, GL_FLOAT, 0, v);
 
 
 	float t[] = {
@@ -198,6 +194,7 @@ void display(void) {
 	glPixelStorei(
 		GL_UNPACK_ALIGNMENT,// GLenum pname
 		1);                 // GLint param
+
 	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
 	glTexCoordPointer(2, GL_FLOAT, 0, t);
 
@@ -211,7 +208,7 @@ void display(void) {
 
 	glDisable(GL_TEXTURE_2D);
 	glColor4f(1, 1, 1, 1);
-	for (int x = -5; x <= 5; x++) {
+	/*for (int x = -5; x <= 5; x++) {
 		glBegin(GL_LINES);
 		{
 			glVertex3f(x, 0, -5);
@@ -225,11 +222,9 @@ void display(void) {
 			glVertex3f(5, 0, x);
 		}
 		glEnd();
-	}
+	}*/
 
 	glEnable(GL_TEXTURE_2D);
-
-
 
 
 	frame++;
@@ -239,18 +234,13 @@ void display(void) {
 		//煙の初期値設定
 		Smoke smk;
 
-		/*smk.pos_y = 0;
-		smk.scl_x = 0;
-		smk.scl_y = 0;
-		smk.scl_z = 0;*/
-
 		smk.alpha = 1;
 
 		smk.position = Vec3(0, 0, 0);
 		smk.scale = Vec3(0, 0, 0);
 
 		smk.pos_speed.x = posSpeed;
-		smk.pos_speed.y = posSpeed;
+		smk.pos_speed.y = posSpeed_Y;
 		smk.pos_speed.z = posSpeed;
 
 		smk.scl_speed.x = sclSpeed;
@@ -258,7 +248,10 @@ void display(void) {
 		smk.scl_speed.z = sclSpeed;
 
 
-		smoke.push_back(smk);
+		//smoke.push_back(smk);
+
+		smoke_list.push_back(smk);
+
 		frame = 0;
 	}
 
@@ -274,6 +267,49 @@ void display(void) {
 	}
 */
 
+	std::list < Smoke > ::iterator smokeIterator = smoke_list.begin();
+
+
+	//printf("%d\n", smoke_list.size());
+
+	//glDisable(GL_TEXTURE_2D);
+	while (smokeIterator != smoke_list.end()) {
+
+		glPushMatrix();
+		{
+			//煙の描画を常に正面に向ける（ビルボード
+			glm::mat4 view;
+			glGetFloatv(
+				GL_MODELVIEW_MATRIX,
+				(float*)&view
+				);
+
+
+			glm::mat4 m = inverse(view);
+			m[3][0] = m[3][1] = m[3][2] = 0;
+			glMultMatrixf((float*)&m);//const GL_FSloat *m
+
+			smokeIterator->updata();
+
+			glColor4f(1, 1, 1, smokeIterator->alpha);
+			glScalef(smokeIterator->scale.x, smokeIterator->scale.y, smokeIterator->scale.z);
+			glTranslatef(smokeIterator->position.x, smokeIterator->position.y, smokeIterator->position.z);
+
+			glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+
+			if (smokeIterator->alpha <= 0) {
+				smokeIterator = smoke_list.erase(smokeIterator);
+			}
+			else {
+				++smokeIterator;
+			}
+
+		}
+		glPopMatrix();
+	}
+
+	/*
 	for (int i = 0; i < smoke.size(); i++) {
 		glPushMatrix();
 		{
@@ -290,13 +326,9 @@ void display(void) {
 
 			smoke[i].updata();
 
-		
-			/*glColor4f(1, 1, 1, smoke[i].alpha);
-			glScalef(smoke[i].scl_x, smoke[i].scl_y, smoke[i].scl_z);
-			glTranslatef(0, smoke[i].pos_y, 0);*/
 
 			glColor4f(1, 1, 1, smoke[i].alpha);
-			glScalef(smoke[i].scale.x,smoke[i].scale.y, smoke[i].scale.z);
+			glScalef(smoke[i].scale.x, smoke[i].scale.y, smoke[i].scale.z);
 			glTranslatef(smoke[i].scale.x, smoke[i].scale.y, smoke[i].scale.z);
 
 			glDrawArrays(
@@ -306,8 +338,9 @@ void display(void) {
 
 		}
 		glPopMatrix();
-	}
 
+	}
+	*/
 	glFlush();
 }
 
