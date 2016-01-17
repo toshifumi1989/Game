@@ -1,7 +1,6 @@
 #define _USE_MATH_DEFINES
 #define _CRT_SECURE_NO_WARNINGS
 
-#define GRAVITY (0.05f)
 #define VTX (256)
 
 #include<stdio.h>
@@ -9,6 +8,7 @@
 #include<Windows.h>
 #include<vector>
 #include<list>
+#include<time.h>
 #include"glut.h"
 #include"glm\glm.hpp"
 
@@ -53,10 +53,10 @@ public:
 	}
 
 	int HP = 10;
-
+	int MaxHP = 10;
+	unsigned char action = 0;
 	glm::vec3 lastPosition;
 
-	bool targetOn = false;
 	char targetNum = 0;
 	glm::vec3 targetPos;
 
@@ -66,8 +66,6 @@ public:
 		speed.z *= 0.95;
 		speed.y -= 0.05;
 		position += speed;
-
-
 
 		if (position.y < 0) {
 			position.y = 0;
@@ -120,9 +118,11 @@ public:
 };
 
 Character player;
+
 std::vector<Character> enemy;
 
 std::list<Bullet> playerBullet;
+std::list<Bullet> enemyBullet;
 
 class Camera {
 public:
@@ -209,9 +209,9 @@ void field() {
 			y = (pixels[VTX * z * (256 / VTX) + x * (256 / VTX)].r + pixels[VTX * z * (256 / VTX) + x * (256 / VTX)].g + pixels[VTX * z * (256 / VTX) + x * (256 / VTX)].b) / 3.f / 100 - 1;
 
 			//vertex
-			vtx.push_back((float)x * 2);
+			vtx.push_back((float)x);
 			vtx.push_back(y);
-			vtx.push_back((float)z * 2);
+			vtx.push_back((float)z);
 
 			//normal
 			normal.push_back(0);
@@ -273,6 +273,10 @@ void keyboardOperate() {
 	}
 }
 
+
+
+
+
 void joystick(unsigned int buttonMask, int x, int y, int z) {
 	printf("buttonMask:%u,x:%d,y:%d,z:%d\n", buttonMask, x, y, z);
 	const int pressedKeys = buttonMask;					//押しているボタン
@@ -281,144 +285,114 @@ void joystick(unsigned int buttonMask, int x, int y, int z) {
 	const int downKeys = changedKeys & pressedKeys;		//今押したボタン
 	const int upKeys = changedKeys & releasedKeys;		//今離れたボタン
 
-														//プレイヤーの向き
 
 
-	//ターゲットロックオン
-	if (downKeys == GLUT_JOYSTICK_BUTTON_B) {
-		if (player.targetOn == true) {
-			player.targetOn = false;
-			player.targetNum = 0;
+
+	//ターゲット切り替え
+	if (downKeys == 16) {
+
+		if (player.targetNum < enemy.size() - 1) {
+			player.targetNum++;
+			player.targetPos = enemy[player.targetNum].position;
+
 		}
-		else {
-			player.targetOn = true;
+		else if (player.targetNum == enemy.size() - 1) {
+			player.targetNum = 0;
 			player.targetPos = enemy[player.targetNum].position;
 		}
 
 	}
 
-	//ターゲット切り替え
-	if (downKeys == 16) {
-		if (player.targetOn == true) {
-			if (player.targetNum < enemy.size() - 1) {
-				player.targetNum++;
-				player.targetPos = enemy[player.targetNum].position;
-
-			}
-			else if (player.targetNum == enemy.size() - 1) {
-				player.targetNum = 0;
-				player.targetPos = enemy[player.targetNum].position;
-			}
-		}
-	}
 
 	//ターゲット切り替え
 	if (downKeys == 32) {
-		if (player.targetOn == true) {
-			if (player.targetNum > 0) {
-				player.targetNum--;
-				player.targetPos = enemy[player.targetNum].position;
-			}
-			else if (player.targetNum == 0) {
-				player.targetNum = enemy.size() - 1;
-				player.targetPos = enemy[player.targetNum].position;
-			}
+
+		if (player.targetNum > 0) {
+			player.targetNum--;
+			player.targetPos = enemy[player.targetNum].position;
 		}
+		else if (player.targetNum == 0) {
+			player.targetNum = enemy.size() - 1;
+			player.targetPos = enemy[player.targetNum].position;
+		}
+
 	}
 
 
-	if (player.targetOn == true) {
 
-		camera.angle = atan2(player.position.x - enemy[player.targetNum].position.x, player.position.z - enemy[player.targetNum].position.z) * 180 / M_PI;
+	//弾の攻撃
+	if (downKeys == GLUT_JOYSTICK_BUTTON_C) {
 
-		
-			if ((camera.angle - player.angle) > 1) {
-				player.angle += (camera.angle - player.angle)/10.f;
-			}
-			
-			
+		Bullet bullet;
+		bullet.OnFlag = true;
+		bullet.position = player.position;
 
-		
-		
-			if ((camera.angle - player.angle) < -1) {
-				player.angle += (camera.angle - player.angle) / 10.f;
-			}
-			
+		//弾の方向と正規化
+
+		glm::vec3 bulletToEnemy(enemy[player.targetNum].position.x - player.position.x, enemy[player.targetNum].position.y - player.position.y, enemy[player.targetNum].position.z - player.position.z);
+
+		bullet.speed = glm::normalize(bulletToEnemy) * 1.2f;
+		playerBullet.push_back(bullet);
+
+		//player.angle = camera.angle;
+
 	}
+
 
 
 	//-----------------------------------------
 	//動作
 	//-----------------------------------------
+
+
 	//ジャンプ
 	if (downKeys == GLUT_JOYSTICK_BUTTON_A) {
 		player.speed.y = 1.5f;
 	}
 
 	//プレイヤーの入力角度
-	float angle = -atan2(x / 1000.f, -y / 1000.f) * 180 / M_PI + camera.angle;
-	//横移動
-	if (x < -200) {
-		
-		if ((angle - player.lastAngle) <-5 || (angle - player.lastAngle) > -170) {
-			player.angle += (angle - player.lastAngle ) / 10.f;
-			player.angle -= (camera.angle - player.angle) / 10.f;
-		}
-		
+	float angle;
+	float playerRad = player.angle * (M_PI / 180.0f);
 
-		player.speed.x += cos(camera.angle * M_PI / 180) * x / 20000;
-		player.speed.z -= sin(camera.angle * M_PI / 180) * x / 20000;
+	glm::vec3 playerDirec = glm::vec3(-sin(playerRad), 0, -cos(playerRad));
+	glm::vec3 targetDirec;
+
+	glm::vec2 stickDirec(x, y);
+
+	if (glm::dot(stickDirec, stickDirec) > 200 * 200) {
+
+		angle = -atan2(x / 1000.f, -y / 1000.f) * 180 / M_PI + camera.angle;
+		float targetRad = angle * (M_PI / 180.0f);
+		targetDirec = glm::vec3(-sin(targetRad), 0, -cos(targetRad));
+		player.speed.x += cos(camera.angle * M_PI / 180) * x / 20000 + sin(camera.angle * M_PI / 180) * y / 20000;
+		player.speed.z += cos(camera.angle * M_PI / 180) * y / 20000 - sin(camera.angle * M_PI / 180) * x / 20000;
+
+	}
+	else {
+		float cameraRad = camera.angle * (M_PI / 180.0f);
+		targetDirec = glm::vec3(-sin(cameraRad), 0, -cos(cameraRad));
+		angle = camera.angle;
 	}
 
-	if (200 < x) {
-		if ((angle - player.lastAngle) > 5 || (angle - player.lastAngle) < 170) {
-			player.angle += (angle - player.lastAngle) / 10.f;
-			player.angle -= (camera.angle - player.angle) / 10.f;
-		}
-		
+	float resultY = glm::cross(playerDirec, targetDirec).y;
+	float resultDot = glm::dot(playerDirec, targetDirec);
+	float torque = (-resultDot + 1) * 0.5f + 0.3f;
 
-
-		player.speed.x += cos(camera.angle * M_PI / 180) * x / 20000;
-		player.speed.z -= sin(camera.angle * M_PI / 180) * x / 20000;
-	}
-
-	//縦移動
-	if (y < -200 ) {
-
-		player.speed.x += sin(camera.angle * M_PI / 180) * y / 20000;
-		player.speed.z += cos(camera.angle * M_PI / 180) * y / 20000;
-	}
-	else if (y > 200) {
-		
-		player.angle += (angle - player.lastAngle) / 10.f;
-
-		player.speed.x += sin(camera.angle * M_PI / 180) * y / 20000;
-		player.speed.z += cos(camera.angle * M_PI / 180) * y / 20000;
-	}
-
-	//弾の攻撃
-	if (downKeys == GLUT_JOYSTICK_BUTTON_C) {
-		if (player.targetOn == true) {
-			Bullet bullet;
-			bullet.OnFlag = true;
-			bullet.position = player.position;
-
-			//弾の方向と正規化
-
-			glm::vec3 bulletToEnemy(enemy[player.targetNum].position.x - player.position.x, enemy[player.targetNum].position.y - player.position.y, enemy[player.targetNum].position.z - player.position.z);
-
-			bullet.speed = glm::normalize(bulletToEnemy) * 1.2f;
-			playerBullet.push_back(bullet);
-
-			player.angle = camera.angle;
-
+	if (resultY*resultY < (10 * M_PI / 180) * (10 * M_PI / 180)) {
+		if (0 < resultDot) {
+			player.angle = angle;
 		}
 	}
+	else if (resultY > 0) {
+		player.angle += 30.0f *torque;
+	}
+	else {
+		player.angle -= 30.0f*torque;
+	}
 
-	printf("%f\n", camera.angle);
 
 	lastkeys = buttonMask;					//このシーンで押していたボタンを保存するため
-	player.lastAngle = player.angle;
+
 }
 
 void timer(int value) {
@@ -431,17 +405,41 @@ void timer(int value) {
 
 void display(void) {
 
-	glutForceJoystickFunc();
-	keyboardOperate();
-	player.update();
+	srand(time(NULL));//ランダムのために初期化
+
+	//カメラの角度
+	camera.angle = atan2(player.position.x - enemy[player.targetNum].position.x, player.position.z - enemy[player.targetNum].position.z) * 180 / M_PI;
+
+	//消滅判定(エネミー
+	for (std::vector<Character>::iterator enemyIter = enemy.begin();
+	enemyIter != enemy.end();) {
+		Character &enemy_it = *enemyIter;
+		if (enemyIter->HP <= 0) {
+			enemyIter = enemy.erase(enemyIter);
+
+		}
+		else {
+			enemyIter++;
+		}
+
+	}
 
 
+	glutForceJoystickFunc();	//ジョイスティック
+	keyboardOperate();			//キーボード
+	player.update();			//プレイヤーの更新
+	player.targetPos = enemy[player.targetNum].position;
+	//敵の更新
+	for (int i = 0; i < enemy.size(); i++) {
 
+		enemy[i].position += enemy[i].speed;
+		enemy[i].speed *= 0.95f;
+
+	}
 
 
 	glColor3f(1, 1, 1);		//色の初期化
 	glClearColor(0, 0.39f, 1, 0);
-
 
 
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -480,10 +478,12 @@ void display(void) {
 
 	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
 
-	glEnable(GL_CULL_FACE);
-	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_CULL_FACE);		//カリング
+	glEnable(GL_DEPTH_TEST);	//深度テスト
 
-	//フィールド------------------------------------------
+
+
+	//フィールド-------------------------------------------------------
 
 	const float *v = vtx.data();
 	const float *n = normal.data();
@@ -499,7 +499,7 @@ void display(void) {
 	glPushMatrix();
 	{
 
-		glTranslatef(-255, 0, -255);
+		glTranslatef(-127, 0, -127);
 		glDrawElements(
 			GL_TRIANGLES,
 			index.size(),
@@ -509,16 +509,14 @@ void display(void) {
 	glPopMatrix();
 
 
-
 	//プレイヤー--------------------------------------------------------------------------------------
 
-
 	//プレイヤーがフィールドからでないように調整
-	if (player.position.x >= 254 || player.position.x <= -254) {
+	if (player.position.x >= 127 || player.position.x <= -127) {
 		player.speed.x = 0;
 		player.position.x = player.lastPosition.x;
 	}
-	if (player.position.z >= 254 || player.position.z <= -254) {
+	if (player.position.z >= 127 || player.position.z <= -127) {
 		player.speed.z = 0;
 		player.position.z = player.lastPosition.z;
 	}
@@ -526,6 +524,7 @@ void display(void) {
 		player.position.y = 0;
 	}
 
+	printf("%f", player.angle);
 
 	//プレイヤー描画
 	glDisable(GL_TEXTURE_2D);
@@ -536,15 +535,29 @@ void display(void) {
 		glRotatef(player.angle, 0, 1, 0);
 
 		player.playerDraw();
+
 	}
 	glPopMatrix();
 
+	glPushMatrix();
+	{
+		glOrtho(0, 1000, 700, 0, -1, 1);// 正射影変換設定
+
+		glColor3f(0, player.HP / player.MaxHP, 0);
+		glBegin(GL_QUADS);
+		{
+			glVertex2f(0, 0);
+			glVertex2f(player.HP / 10.f, 0);
+			glVertex2f(player.HP / 10.f, 0.5f);
+			glVertex2f(0, 0.5f);
+		}
+		glEnd();
+	}
+	glPopMatrix();
+
+	player.lastPosition = player.position;
 
 	//プレイヤーバレット描画
-
-
-
-
 
 	std::list<Bullet>::iterator playerBulletIter = playerBullet.begin();
 
@@ -568,8 +581,8 @@ void display(void) {
 		}
 
 		//フィールドの外にでる
-		if (playerBulletIter->position.x >= 254 || playerBulletIter->position.x <= -254 ||
-			playerBulletIter->position.z >= 254 || playerBulletIter->position.z <= -254) {
+		if (playerBulletIter->position.x >= 127 || playerBulletIter->position.x <= -127 ||
+			playerBulletIter->position.z >= 127 || playerBulletIter->position.z <= -127) {
 			playerBulletIter->OnFlag = false;
 		}
 
@@ -591,21 +604,16 @@ void display(void) {
 	}
 
 
+	//エネミ------------------------------------------------------------------------------------------------------------
 
-
-
-
-
-	//エネミ-------------------------------------
-
+	//敵の出現条件
 	for (int i = 0; i < enemy.size(); i++) {
 
 		if (enemy[i].HP <= 0) {
 
-			player.targetOn = false;
-
 			for (int j = 0; j < 2; j++) {
 				Character gm;
+				gm.action = rand() % 60;
 				gm.HP = 10;
 				gm.position.x = rand() % 400 - 200;
 				gm.position.y = rand() % 20;
@@ -618,21 +626,58 @@ void display(void) {
 
 	}
 
+	//敵の動作
+
+	for (int i = 0; i < enemy.size(); i++) {
+		enemy[i].action++;//行動の間隔を広げるためにカウント
 
 
-	//消滅判定
+		//１秒ごとに動作が変わる
+		if (enemy[i].action == 120) {
+			enemy[i].action = 0;
+			enemy[i].speed = glm::vec3(0, 0, 0);
 
-	for (std::vector<Character>::iterator enemyIter = enemy.begin();
-	enemyIter != enemy.end();) {
-		Character &enemy_it = *enemyIter;
-		if (enemyIter->HP <= 0) {
-			enemyIter = enemy.erase(enemyIter);
+			int random = rand() % 5;
+
+			if (random == 0 || random == 1) {
+				if (random == 0) {
+					enemy[i].speed.x = 1;
+				}
+				else {
+					enemy[i].speed.x = -1;
+				}
+
+			}
+			else if (random == 2 || random == 3) {
+				if (random == 2) {
+					enemy[i].speed.z = 1;
+				}
+				else {
+					enemy[i].speed.z = -1;
+				}
+
+			}
+			else {
+				//バレット(エネミー
+
+				Bullet bullet;
+				bullet.OnFlag = true;
+				bullet.position = enemy[i].position;
+
+				glm::vec3 bulletToPlayer(player.position.x - enemy[i].position.x, player.position.y - enemy[i].position.y, player.position.z - enemy[i].position.z);
+				bullet.speed = glm::normalize(bulletToPlayer);
+
+				enemyBullet.push_back(bullet);
+			}
 
 		}
-		else {
-			enemyIter++;
+
+		if (enemy[i].position.x > 127 || enemy[i].position.x < -127 ||
+			enemy[i].position.z > 127 || enemy[i].position.x < -127) {
+			enemy[i].position = enemy[i].lastPosition;
 		}
 
+		enemy[i].lastPosition = enemy[i].position;
 	}
 
 
@@ -642,11 +687,76 @@ void display(void) {
 
 		glPushMatrix();
 		{
+			enemy[i].angle = atan2(enemy[player.targetNum].position.x - player.position.x, enemy[player.targetNum].position.z - player.position.z) * 180 / M_PI;
+
 			glTranslatef(enemy[i].position.x, enemy[i].position.y, enemy[i].position.z);
+			glRotatef(enemy[i].angle, 0, 1, 0);
 			enemy[i].enemyDraw();
+
+			glm::mat4 view;
+			glGetFloatv(GL_MODELVIEW_MATRIX, (float*)&view);
+
+			glm::mat4 m = glm::inverse(view);
+			m[3][0] = m[3][1] = m[3][2] = 0;
+
+			glMultMatrixf((float*)&m);
+
+			glTranslatef(-1, 2, 0);
+
+			glColor3f(1, 1, 0);
+			glBegin(GL_QUAD_STRIP);
+			{
+
+				glVertex3f(enemy[i].HP / 5.f, 0.25f, 0);
+				glVertex3f(0, 0.25f, 0);
+				glVertex3f(enemy[i].HP / 5.f, -0.25f, 0);
+				glVertex3f(0, -0.25f, 0);
+			}
+			glEnd();
+
 		}
 		glPopMatrix();
 	}
+
+
+	//エネミーバレット描画と当たり判定
+
+	std::list<Bullet>::iterator enemyBulletIter = enemyBullet.begin();
+
+	while (enemyBulletIter != enemyBullet.end()) {
+		enemyBulletIter->update();
+
+		const float bulletToPlayer =
+			(enemyBulletIter->position.x - player.position.x) * (enemyBulletIter->position.x - player.position.x)
+			+ (enemyBulletIter->position.y - player.position.y) * (enemyBulletIter->position.y - player.position.y)
+			+ (enemyBulletIter->position.z - player.position.z) * (enemyBulletIter->position.z - player.position.z);
+
+		if (bulletToPlayer <= 1) {
+			player.HP -= 1;
+			enemyBulletIter->OnFlag = false;
+		}
+
+		if (enemyBulletIter->position.x >= 127 || enemyBulletIter->position.x <= -127 ||
+			enemyBulletIter->position.z >= 127 || enemyBulletIter->position.z <= -127) {
+			enemyBulletIter->OnFlag = false;
+		}
+
+
+		if (enemyBulletIter->OnFlag == false) {
+			enemyBulletIter = enemyBullet.erase(enemyBulletIter);
+		}
+		else {
+			glPushMatrix();
+			{
+				glColor3f(1, 1, 1);
+				glTranslatef(enemyBulletIter->position.x, enemyBulletIter->position.y, enemyBulletIter->position.z);
+				enemyBulletIter->draw();
+				++enemyBulletIter;
+			}
+			glPopMatrix();
+		}
+	}
+
 
 
 	//カメラ設定------------------------------------------------------------
@@ -661,26 +771,16 @@ void display(void) {
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
 
-	if (player.targetOn == true) {
 
-		camera.eyes.x = player.position.x + 4 * sin(camera.angle * M_PI / 180) * 1.0f;
-		camera.eyes.y = player.position.y + 2;
-		camera.eyes.z = player.position.z + 4 * cos(camera.angle * M_PI / 180) * 1.0f;
+	camera.eyes.x = player.position.x + 4 * sin(camera.angle * M_PI / 180) * 1.0f;
+	camera.eyes.y = player.position.y + 2;
+	camera.eyes.z = player.position.z + 4 * cos(camera.angle * M_PI / 180) * 1.0f;
 
 
-		camera.targetPos.x = (player.position.x + player.targetPos.x) / 2;
-		camera.targetPos.y = (player.position.y + player.targetPos.y) / 2;
-		camera.targetPos.z = (player.position.z + player.targetPos.z) / 2;
-	}
-	else {
+	camera.targetPos.x = (player.position.x + player.targetPos.x) / 2;
+	camera.targetPos.y = (player.position.y + player.targetPos.y) / 2;
+	camera.targetPos.z = (player.position.z + player.targetPos.z) / 2;
 
-		camera.eyes.x = player.position.x + 4 * sin(camera.angle * M_PI / 180) * 1.0f;
-		camera.eyes.y = player.position.y + 2;
-		camera.eyes.z = player.position.z + 4 * cos(camera.angle * M_PI / 180) * 1.0f;
-		camera.targetPos.x = player.position.x;
-		camera.targetPos.y = player.position.y + 2;
-		camera.targetPos.z = player.position.z;
-	}
 
 	gluLookAt(
 		camera.eyes.x, camera.eyes.y, camera.eyes.z,
@@ -689,7 +789,6 @@ void display(void) {
 
 
 
-	player.lastPosition = player.position;
 	glFlush();
 }
 
@@ -707,14 +806,20 @@ int main(int argc, char *argv[]) {
 
 
 	//敵の出現
-	while (4 > enemy.size()) {
+	while (10 > enemy.size()) {
 		Character gm;
-		gm.position.x = rand() % 400 - 200;
+		gm.action = rand() % 60;
+		gm.position.x = rand() % 200 - 100;
 		gm.position.y = rand() % 20;
-		gm.position.z = rand() % 400 - 200;
+		gm.position.z = rand() % 200 - 100;
 
 		enemy.push_back(gm);
+
 	}
+
+	player.targetNum = 0;
+	player.targetPos = enemy[0].position;
+	player.angle = atan2(player.position.x - enemy[player.targetNum].position.x, player.position.z - enemy[player.targetNum].position.z) * 180 / M_PI;
 
 	glutInit(&argc, argv);
 	glutInitWindowSize(1000, 700);
